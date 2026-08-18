@@ -74,8 +74,32 @@ const copy = async id => {
   try { await navigator.clipboard.writeText(value); show($('connectStatus'), 'Copied to clipboard.'); }
   catch { show($('connectStatus'), 'Clipboard access failed. Select and copy the text manually.'); }
 };
+const reset = () => {
+  document.querySelectorAll('input, select, textarea').forEach(field => { field.value = ''; });
+  $('calendarChoicesWrap').hidden = true;
+  $('mcpUrl').value = '';
+  $('config').value = '';
+  $('made').textContent = '';
+  $('connectionStatus').textContent = '';
+  $('connectStatus').textContent = '';
+  slide = 0;
+  renderSlide();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+const downloadConfig = () => {
+  const value = $('config').value;
+  if (!value) return show($('connectStatus'), 'Create a token first.');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([value], { type: 'application/json' }));
+  link.download = 'caldav-mcp.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  show($('connectStatus'), 'Configuration downloaded.');
+};
 $('copyUrl').onclick = () => copy('mcpUrl');
 $('copyConfig').onclick = () => copy('config');
+$('downloadConfig').onclick = () => downloadConfig();
+$('startOver').onclick = () => reset();
 renderSlide();
 `;
 
@@ -101,9 +125,9 @@ export function homePage(origin: string): Response {
       <section data-slide="2" id="connect" className="panel soft" hidden><h2>03 / Connect your AI assistant</h2><p className="hint">Create your secure token, then copy one option into your MCP-compatible assistant.</p>
         <button id="makeToken" className="primary">Create secure token →</button><output id="made" className="status" aria-live="polite" />
         <label htmlFor="mcpUrl">MCP URL</label><textarea id="mcpUrl" readOnly placeholder="Your URL appears here after token creation" /><button id="copyUrl" className="secondary">Copy URL</button>
-        <label htmlFor="config">Configuration</label><textarea id="config" readOnly placeholder="Your configuration appears here after token creation" /><button id="copyConfig" className="secondary">Copy configuration</button><output id="connectStatus" className="status" aria-live="polite" />
+        <label htmlFor="config">Configuration</label><textarea id="config" readOnly placeholder="Your configuration appears here after token creation" /><button id="copyConfig" className="secondary">Copy configuration</button><button id="downloadConfig" className="secondary" type="button">Download configuration</button><output id="connectStatus" className="status" aria-live="polite" />
       </section>
-      <nav className="navigation" aria-label="Setup navigation"><button id="back" className="secondary" type="button">← Back</button><span id="progress" className="status" aria-live="polite" /><button id="next" className="primary" type="button">Next →</button></nav>
+      <nav className="navigation" aria-label="Setup navigation"><button id="back" className="secondary" type="button">← Back</button><span id="progress" className="status" aria-live="polite" /><button id="next" className="primary" type="button">Next →</button></nav><button id="startOver" className="secondary" type="button">Start over</button>
       <p className="fine">Tokens are encrypted and do not expire unless you choose a lifetime above. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke all existing tokens. The service stores no calendar data.</p>
     </main>
     <script dangerouslySetInnerHTML={{ __html: clientScript(origin) }} />
