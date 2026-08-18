@@ -1,126 +1,58 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { DAVClient } from 'tsdav';
+import { DAVClient, freeBusyQuery } from 'tsdav';
 import { z } from 'zod';
+import { calendarFor, createICalendar, EventInput, objectResult, updateICalendar } from './calendar';
+import { Connection, decodeConnectionToken } from './token';
 
-interface Env {
-  CONNECTION_TOKEN_KEY?: string;
-}
+interface Env { CONNECTION_TOKEN_KEY?: string }
+const range = { start: z.string(), end: z.string() };
+const calendar = { calendarUrl: z.string().url().optional() };
+const eventFields = { summary: z.string().optional(), start: z.string().optional(), end: z.string().optional(), description: z.string().optional(), location: z.string().optional(), status: z.string().optional(), recurrenceRule: z.string().optional() };
 
-type Connection = {
-  serverUrl: string;
-  username: string;
-  password: string;
-  calendarUrl?: string;
-};
-
-const tokenSchema = z.object({
-  serverUrl: z.string().url(),
-  username: z.string().min(1),
-  password: z.string().min(1),
-  calendarUrl: z.string().url().optional(),
-});
-
-const toolInput = {
-  calendarUrl: z.string().url().optional(),
-  start: z.string().optional(),
-  end: z.string().optional(),
-};
-
-function json(value: unknown, status = 200): Response {
-  return Response.json(value, { status });
-}
-
-function decodeConnectionToken(token: string): Connection {
-  // Initial simple format: URL-safe base64 JSON. Replace this with encrypted
-  // tokens before exposing the Worker publicly.
-  const encoded = token.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=');
-  const connection = tokenSchema.parse(JSON.parse(atob(padded)));
-  return connection;
-}
-
-function createClient(connection: Connection): DAVClient {
-  return new DAVClient({
-    serverUrl: connection.serverUrl,
-    credentials: {
-      username: connection.username,
-      password: connection.password,
-    },
-    authMethod: 'Basic',
-    defaultAccountType: 'caldav',
-  });
-}
+function result(value: unknown) { return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] }; }
+function clientFor(connection: Connection) { return new DAVClient({ serverUrl: connection.serverUrl, credentials: { username: connection.username, password: connection.password }, authMethod: 'Basic', defaultAccountType: 'caldav' }); }
 
 function createServer(connection: Connection): McpServer {
-  const server = new McpServer({ name: 'caldav-forwarder', version: '0.1.0' });
-  const client = createClient(connection);
+  const server = new McpServer({ name: 'caldav-forwarder', version: '1.0.0' });
+  const client = clientFor(connection);
+  const login = async () => { await client.login(); return client; };
 
-  server.registerTool('list_calendars', {
-    description: 'List calendars available in the CalDAV account.',
-    inputSchema: {},
-  }, async () => {
-    await client.login();
-    const calendars = await client.fetchCalendars();
-    return { content: [{ type: 'text', text: JSON.stringify(calendars) }] };
+  server.registerTool('list_calendars', { description: 'List calendars available in the CalDAV account.', inputSchema: {} }, async () => result(await (await login()).fetchCalendars()));
+  server.registerTool('list_events', { description: 'List events in a calendar and optional time range.', inputSchema: { ...calendar, ...range, expand: z.boolean().optional() } }, async ({ calendarUrl, start, end, expand }) => {
+    const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl);
+    return result(await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end }, expand }));
   });
-
-  server.registerTool('list_events', {
-    description: 'List events in a calendar, optionally within a time range.',
-    inputSchema: toolInput,
-  }, async ({ calendarUrl, start, end }) => {
-    await client.login();
-    const calendars = await client.fetchCalendars();
-    const calendar = calendars.find((item) => item.url === (calendarUrl ?? connection.calendarUrl)) ?? calendars[0];
-    if (!calendar) {
-      throw new Error('No calendar was found. Provide calendarUrl in the connection token.');
-    }
-    const objects = await client.fetchCalendarObjects({
-      calendar,
-      timeRange: start && end ? { start, end } : undefined,
-    });
-    return { content: [{ type: 'text', text: JSON.stringify(objects) }] };
+  server.registerTool('search_events', { description: 'Search event data in a calendar and optional time range.', inputSchema: { ...calendar, ...range, query: z.string().min(1) } }, async ({ calendarUrl, start, end, query }) => {
+    const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl); const objects = await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end } });
+    return result(objects.filter((item) => String(item.data ?? '').toLowerCase().includes(query.toLowerCase())));
   });
-
-  server.registerTool('get_event', {
-    description: 'Read one event using its calendar object URL.',
-    inputSchema: { eventUrl: z.string().url() },
-  }, async ({ eventUrl }) => {
-    await client.login();
-    const response = await fetch(eventUrl, {
-      headers: { Authorization: `Basic ${btoa(`${connection.username}:${connection.password}`)}` },
-    });
-    if (!response.ok) throw new Error(`CalDAV returned ${response.status}`);
-    return { content: [{ type: 'text', text: await response.text() }] };
+  server.registerTool('get_event', { description: 'Read one event by its calendar object URL.', inputSchema: { eventUrl: z.string().url() } }, async ({ eventUrl }) => {
+    const c = await login(); const objects = await c.fetchCalendarObjects({ calendar: { url: new URL('.', eventUrl).toString() }, objectUrls: [eventUrl] });
+    if (!objects[0]) throw new Error('Event not found.'); return objectResult(objects[0]);
   });
-
+  server.registerTool('create_event', { description: 'Create an event in a calendar.', inputSchema: { ...calendar, ...eventFields, summary: z.string().min(1), start: z.string(), end: z.string(), filename: z.string().regex(/^[^/]+\.ics$/).optional(), attendees: z.array(z.string()).optional() } }, async (input) => {
+    const c = await login(); const cal = await calendarFor(c, input.calendarUrl, connection.calendarUrl); const response = await c.createCalendarObject({ calendar: cal, filename: input.filename ?? `${crypto.randomUUID()}.ics`, iCalString: createICalendar(input as EventInput) });
+    return result({ status: response.status, url: response.headers.get('location') });
+  });
+  server.registerTool('update_event', { description: 'Update an existing event using its object URL and current iCalendar data.', inputSchema: { eventUrl: z.string().url(), data: z.string().min(1), ...eventFields } }, async ({ eventUrl, data, ...input }) => {
+    const c = await login(); const response = await c.updateCalendarObject({ calendarObject: { url: eventUrl, data: updateICalendar(data, input) } }); return result({ status: response.status });
+  });
+  server.registerTool('delete_event', { description: 'Delete an event by its calendar object URL.', inputSchema: { eventUrl: z.string().url(), etag: z.string().optional() } }, async ({ eventUrl, etag }) => {
+    const c = await login(); const response = await c.deleteCalendarObject({ calendarObject: { url: eventUrl, etag } }); return result({ status: response.status });
+  });
+  server.registerTool('get_free_busy', { description: 'Get free/busy data for a time range.', inputSchema: { url: z.string().url().optional(), ...range } }, async ({ url, start, end }) => result(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} })));
   return server;
 }
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    if (url.pathname === '/') {
-      return new Response('CalDAV MCP Forwarder is running. Connect an MCP client at /mcp/<connection-token>.', {
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-      });
-    }
-    if (!url.pathname.startsWith('/mcp/')) return json({ error: 'Not found' }, 404);
-    if (request.method !== 'POST') return json({ error: 'Use POST for the stateless MCP endpoint.' }, 405);
-
-    try {
-      const token = url.pathname.slice('/mcp/'.length);
-      const connection = decodeConnectionToken(token);
-      const server = createServer(connection);
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      });
-      await server.connect(transport);
-      return await transport.handleRequest(request);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Invalid request';
-      return json({ error: message }, 400);
-    }
-  },
-};
+export default { async fetch(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname === '/') return new Response('CalDAV MCP Forwarder. Connect at /mcp/<connection-token>.', { headers: { 'content-type': 'text/plain' } });
+  if (!url.pathname.startsWith('/mcp/')) return Response.json({ error: 'Not found' }, { status: 404 });
+  if (request.method !== 'POST') return Response.json({ error: 'Use POST for the stateless MCP endpoint.' }, { status: 405 });
+  try {
+    const connection = await decodeConnectionToken(url.pathname.slice(5), env.CONNECTION_TOKEN_KEY);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await createServer(connection).connect(transport); return await transport.handleRequest(request);
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Invalid request' }, { status: 400 }); }
+} };

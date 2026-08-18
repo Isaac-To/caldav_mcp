@@ -2,7 +2,7 @@
 
 A completely stateless [Model Context Protocol](https://modelcontextprotocol.io/) server that forwards calendar operations to a CalDAV server from Cloudflare Workers.
 
-> **Status:** Early development. The Worker currently supports calendar listing, event listing, and event retrieval. Create, update, and delete operations are next.
+> **Status:** Functional first release. The Worker supports calendar discovery, event listing/search, event retrieval, creation, updates, deletion, and free/busy queries.
 
 ## What it does
 
@@ -24,7 +24,7 @@ Each request is handled independently. The service does not use KV, D1, R2, Dura
 
 Do not place raw passwords, app passwords, or access tokens directly in a URL. URLs may be retained by browser history, reverse proxies, analytics systems, and access logs.
 
-The current connection format is a URL-safe base64 connection token:
+For local development, the connection format is a URL-safe base64 connection token:
 
 ```text
 POST https://your-worker.example.com/mcp/<encrypted-connection-token>
@@ -42,7 +42,7 @@ The token represents connection details such as:
 }
 ```
 
-The Worker decodes the token for the duration of one request and discards the values afterward. Base64 is encoding, not encryption, so this format is suitable only for local development. Before deploying publicly, replace it with an encrypted token or use an authorization header.
+The Worker decodes the token for the duration of one request and discards the values afterward. Base64 is encoding, not encryption. For production, use an AES-GCM token beginning with `v1.` and configure `CONNECTION_TOKEN_KEY` as a Worker secret. The token key must be a URL-safe base64 encoding of a 128-, 192-, or 256-bit key.
 
 Prefer provider-specific app passwords or OAuth access tokens over a primary account password. Never commit tokens or credentials to this repository.
 
@@ -109,6 +109,9 @@ Type-check the project:
 npm run typecheck
 ```
 
+# Run unit tests
+npm test
+
 Deploy to Cloudflare Workers:
 
 ```sh
@@ -116,13 +119,30 @@ npx wrangler login
 npm run deploy
 ```
 
-Set the encryption key as a Cloudflare Worker secret after encrypted token support is added:
+Set the encryption key as a Cloudflare Worker secret:
 
 ```sh
 npx wrangler secret put CONNECTION_TOKEN_KEY
 ```
 
 Never put the encryption key in `wrangler.jsonc`, source code, or client configuration.
+
+## Available tools
+
+All tools operate on the calendar selected by `calendarUrl` in the token, or accept an explicit `calendarUrl` where appropriate.
+
+| Tool | Purpose |
+| --- | --- |
+| `list_calendars` | Discover calendars in the account. |
+| `list_events` | List events for a required `start`/`end` range. |
+| `search_events` | Search returned event data by text. |
+| `get_event` | Fetch an event by its object URL. |
+| `create_event` | Create an event with summary, start, and end. |
+| `update_event` | Update an event using its current iCalendar data and object URL. |
+| `delete_event` | Delete an event, optionally supplying its ETag. |
+| `get_free_busy` | Query free/busy data for a time range. |
+
+Dates should be ISO 8601 strings, for example `2026-08-20T10:00:00Z`. Event updates require the current iCalendar `data` so unknown provider-specific properties are preserved.
 
 ## Stateless request flow
 
@@ -140,7 +160,7 @@ Cloudflare Worker
 CalDAV server
 ```
 
-No calendar data or MCP session state is retained by this Worker.
+No calendar data or MCP session state is retained by this Worker. The request body, credentials, and CalDAV response exist only during the request.
 
 ## Provider notes
 
