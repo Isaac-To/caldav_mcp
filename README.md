@@ -173,6 +173,17 @@ All tools operate on the calendar selected by `calendarUrl` in the token, or acc
 
 Dates should be ISO 8601 strings, for example `2026-08-20T10:00:00Z`. Event updates require the current iCalendar `data` so unknown provider-specific properties are preserved.
 
+### Tool behavior for agents
+
+- Call `list_calendars` first when the available calendar URLs are unknown.
+- `list_events` and `search_events` require `start` and `end`. An explicit `calendarUrl` selects one calendar. Without it, the token's configured calendar is used; if none is configured, all calendars are searched.
+- `search_events` performs a case-insensitive text search over each event's iCalendar data, not only the event title.
+- `get_event` requires the event's current HTTPS object URL.
+- `create_event` requires `summary`, `start`, and `end`; calendar selection is explicit URL, token calendar, then the first available calendar.
+- `update_event` requires the current event `data`; send only fields that should change because omitted fields are preserved.
+- `delete_event` permanently removes an event. Confirm the deletion with the user first, and pass the current ETag when available.
+- `get_free_busy` returns iCalendar free/busy data for the requested range and does not list event details.
+
 ## Stateless request flow
 
 ```text

@@ -89,31 +89,31 @@ function createServer(connection: Connection): McpServer {
   const client = clientFor(connection);
   const login = async () => { await client.login(); return client; };
 
-  server.registerTool('list_calendars', { description: 'List calendars available in the CalDAV account. Returns each calendar URL and basic metadata.', inputSchema: {} }, async () => result((await (await login()).fetchCalendars()).map(simpleCalendar)));
-  server.registerTool('list_events', { description: 'List events in a selected calendar, or all calendars when calendarUrl is omitted.', inputSchema: { ...calendar, ...range, expand: z.boolean().optional() } }, async ({ calendarUrl, start, end, expand }) => {
+  server.registerTool('list_calendars', { description: 'List calendars available in the CalDAV account. Use a returned url as calendarUrl for one calendar. If calendarUrl is omitted from list_events or search_events, they search all calendars unless the connection token has a configured calendarUrl.', inputSchema: {} }, async () => result((await (await login()).fetchCalendars()).map(simpleCalendar)));
+  server.registerTool('list_events', { description: 'List events within the required start and end range. If calendarUrl is provided, use only that calendar. If omitted, use the token calendarUrl when configured; otherwise use all calendars. Returns url, etag, and iCalendar data.', inputSchema: { ...calendar, ...range, expand: z.boolean().optional() } }, async ({ calendarUrl, start, end, expand }) => {
     const c = await login(); const calendars = await calendarsFor(c, calendarUrl, connection.calendarUrl);
     const events = (await Promise.all(calendars.map((cal) => c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end }, expand })))).flat();
     return result(events.map(simpleEvent));
   });
-  server.registerTool('search_events', { description: 'Search events in a selected calendar, or all calendars when calendarUrl is omitted.', inputSchema: { ...calendar, ...range, query: z.string().min(1) } }, async ({ calendarUrl, start, end, query }) => {
+  server.registerTool('search_events', { description: 'Search event iCalendar data for query within the required start and end range. Calendar selection follows list_events: explicit calendarUrl, then token calendarUrl, otherwise all calendars. Returns matching event url, etag, and data.', inputSchema: { ...calendar, ...range, query: z.string().min(1) } }, async ({ calendarUrl, start, end, query }) => {
     const c = await login(); const calendars = await calendarsFor(c, calendarUrl, connection.calendarUrl); const objects = (await Promise.all(calendars.map((cal) => c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end } })))).flat();
     return result(objects.filter((item) => String(item.data ?? '').toLowerCase().includes(query.toLowerCase())).map(simpleEvent));
   });
-  server.registerTool('get_event', { description: 'Read one event by its calendar object URL.', inputSchema: { eventUrl: secureUrl } }, async ({ eventUrl }) => {
+  server.registerTool('get_event', { description: 'Read one event by its HTTPS calendar object URL. Requires the current eventUrl and returns url, etag, and iCalendar data.', inputSchema: { eventUrl: secureUrl } }, async ({ eventUrl }) => {
     const c = await login(); const objects = await c.fetchCalendarObjects({ calendar: { url: new URL('.', eventUrl).toString() }, objectUrls: [eventUrl] });
     if (!objects[0]) throw new Error('Event not found.'); return objectResult(objects[0]);
   });
-  server.registerTool('create_event', { description: 'Create an event in a calendar.', inputSchema: { ...calendar, ...eventFields, summary: z.string().min(1), start: z.string(), end: z.string(), filename: z.string().regex(/^[^/]+\.ics$/).optional(), attendees: z.array(z.string()).optional() } }, async (input) => {
+  server.registerTool('create_event', { description: 'Create an event in the selected calendar. Uses explicit calendarUrl, then the token calendarUrl, otherwise the first available calendar. Required: summary, start, end. Returns the created event url.', inputSchema: { ...calendar, ...eventFields, summary: z.string().min(1), start: z.string(), end: z.string(), filename: z.string().regex(/^[^/]+\.ics$/).optional(), attendees: z.array(z.string()).optional() } }, async (input) => {
     const c = await login(); const cal = await calendarFor(c, input.calendarUrl, connection.calendarUrl); const response = await c.createCalendarObject({ calendar: cal, filename: input.filename ?? `${crypto.randomUUID()}.ics`, iCalString: createICalendar(input as EventInput) });
     return result({ url: response.headers.get('location') });
   });
-  server.registerTool('update_event', { description: 'Update an existing event using its object URL and current iCalendar data.', inputSchema: { eventUrl: secureUrl, data: z.string().min(1), ...eventFields } }, async ({ eventUrl, data, ...input }) => {
+  server.registerTool('update_event', { description: 'Update an event using its HTTPS eventUrl and current iCalendar data. Provide only fields to change; omitted fields stay unchanged. Returns the event url.', inputSchema: { eventUrl: secureUrl, data: z.string().min(1), ...eventFields } }, async ({ eventUrl, data, ...input }) => {
     const c = await login(); await c.updateCalendarObject({ calendarObject: { url: eventUrl, data: updateICalendar(data, input) } }); return result({ url: eventUrl });
   });
-  server.registerTool('delete_event', { description: 'Delete an event by its calendar object URL.', inputSchema: { eventUrl: secureUrl, etag: z.string().max(512).optional() } }, async ({ eventUrl, etag }) => {
+  server.registerTool('delete_event', { description: 'Permanently delete an event by its HTTPS eventUrl. Confirm this destructive action before calling. Provide etag when available. Returns the event url and deleted: true.', inputSchema: { eventUrl: secureUrl, etag: z.string().max(512).optional() } }, async ({ eventUrl, etag }) => {
     const c = await login(); await c.deleteCalendarObject({ calendarObject: { url: eventUrl, etag } }); return result({ url: eventUrl, deleted: true });
   });
-  server.registerTool('get_free_busy', { description: 'Get free/busy data for a time range. Returns the calendar data only.', inputSchema: { url: secureUrl.optional(), ...range } }, async ({ url, start, end }) => result(simpleFreeBusy(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} }))));
+  server.registerTool('get_free_busy', { description: 'Get free/busy data for the required start and end range. Uses the optional HTTPS url or the CalDAV server URL from the connection. Returns only iCalendar free/busy data.', inputSchema: { url: secureUrl.optional(), ...range } }, async ({ url, start, end }) => result(simpleFreeBusy(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} }))));
   return server;
 }
 
