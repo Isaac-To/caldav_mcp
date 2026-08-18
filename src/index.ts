@@ -38,7 +38,7 @@ function homePage(origin: string): Response {
   <h1>CalDAV MCP Forwarder</h1>
   <p class="muted">Connect your AI assistant to a CalDAV calendar in three steps.</p>
   <ol><li>Enter your CalDAV details below.</li><li>Make a token.</li><li>Paste the generated MCP URL into your AI assistant.</li></ol>
-  <div class="warning"><strong>Use an app password</strong> when your calendar provider supports it. Your details are processed in this browser and are not sent to this page.</div>
+  <div class="warning"><strong>Use an app password</strong> when your calendar provider supports it. Your details are sent over HTTPS only to create the encrypted token.</div>
   <section class="card">
     <h2>1. Calendar details</h2>
     <label for="provider">Calendar provider</label><select id="provider"><option value="">Choose a provider</option><option value="nextcloud">Nextcloud</option><option value="fastmail">Fastmail</option><option value="icloud">iCloud</option><option value="other">Other</option></select>
@@ -73,7 +73,6 @@ const connection = () => { if (!$('serverUrl').value || !$('username').value || 
 const show = (element, value) => { element.textContent = value; };
 $('provider').onchange = () => { const hints = { nextcloud: 'Nextcloud usually uses an app password and a calendar URL from the Calendar app.', fastmail: 'Fastmail uses an app-specific password and its CalDAV server URL.', icloud: 'iCloud requires an app-specific password; use the CalDAV URL from Apple’s account settings.', other: 'Use the CalDAV URL and app password supplied by your provider.' }; show($('providerHelp'), hints[$('provider').value] || 'Choose a provider for a quick hint, or choose Other.'); };
 const finish = (token) => { const url = '${origin}/mcp/' + token; $('token').value = token; $('mcpUrl').value = url; $('config').value = JSON.stringify({ mcpServers: { caldav: { type: 'http', url } } }, null, 2); show($('made'), 'Token created. Copy the MCP URL or configuration below.'); };
-$('makeDev').onclick = () => { try { finish(b64(bytes(JSON.stringify(connection())))); } catch (e) { show($('made'), e.message); } };
 $('makeEncrypted').onclick = async () => { try { const response = await fetch('/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(connection()) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Could not create token.'); finish(body.token); } catch (e) { show($('made'), e.message); } };
 $('copyUrl').onclick = async () => { if (!$('mcpUrl').value) return show($('connectStatus'), 'Make a token first.'); await navigator.clipboard.writeText($('mcpUrl').value); show($('connectStatus'), 'MCP URL copied.'); };
 $('copyConfig').onclick = async () => { if (!$('config').value) return show($('connectStatus'), 'Make a token first.'); await navigator.clipboard.writeText($('config').value); show($('connectStatus'), 'Configuration copied.'); };
