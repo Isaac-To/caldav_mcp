@@ -119,6 +119,15 @@ Set the encryption key as a Cloudflare Worker secret:
 npx wrangler secret put CONNECTION_TOKEN_KEY
 ```
 
+For local development, create `.dev.vars` from `.dev.vars.example` and replace
+the placeholder with a generated key. Wrangler loads `.dev.vars` automatically
+when running `npm run dev`; do not commit that file.
+
+```sh
+cp .dev.vars.example .dev.vars
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+```
+
 Never put the encryption key in `wrangler.jsonc`, source code, or client configuration.
 
 ## Available tools

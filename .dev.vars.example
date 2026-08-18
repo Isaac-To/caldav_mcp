@@ -1,0 +1,3 @@
+# Generate a URL-safe base64 AES key with:
+# openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+CONNECTION_TOKEN_KEY=replace-with-a-32-byte-url-safe-base64-key
