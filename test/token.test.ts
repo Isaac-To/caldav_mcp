@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDevelopmentToken, createEncryptedToken, decodeConnectionToken } from '../src/token';
+import { createDevelopmentToken, createEncryptedToken, decodeConnectionToken, sameSecureOrigin } from '../src/token';
 
 const connection = { serverUrl: 'https://caldav.example.test', username: 'user', password: 'app-password', expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 
@@ -51,5 +51,11 @@ describe('connection tokens', () => {
 
   it('rejects invalid AES key lengths', async () => {
     await expect(createEncryptedToken(connection, 'AAAA')).rejects.toThrow('valid AES key');
+  });
+
+  it('matches only the configured secure origin', () => {
+    expect(sameSecureOrigin('https://caldav.example.test/events/1.ics', connection.serverUrl)).toBe(true);
+    expect(sameSecureOrigin('https://other.example.test/events/1.ics', connection.serverUrl)).toBe(false);
+    expect(sameSecureOrigin('http://caldav.example.test/events/1.ics', connection.serverUrl)).toBe(false);
   });
 });
