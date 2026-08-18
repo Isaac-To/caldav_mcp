@@ -34,7 +34,7 @@ export function createICalendar(input: EventInput): string {
   if (input.location) lines.push(`LOCATION:${escape(input.location)}`);
   if (input.status) lines.push(`STATUS:${escape(input.status.toUpperCase())}`);
   for (const attendee of input.attendees ?? []) lines.push(`ATTENDEE:${escape(attendee)}`);
-  if (input.recurrenceRule) lines.push(`RRULE:${escape(input.recurrenceRule)}`);
+  if (input.recurrenceRule) lines.push(`RRULE:${ICAL.Recur.fromString(input.recurrenceRule).toString()}`);
   lines.push('END:VEVENT', 'END:VCALENDAR');
   return `${lines.join('\r\n')}\r\n`;
 }

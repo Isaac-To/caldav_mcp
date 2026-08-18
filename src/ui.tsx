@@ -11,7 +11,7 @@ const validateSlide = () => { for (const field of slides[slide].querySelectorAll
 const move = direction => { if (direction > 0 && !validateSlide()) return; slide = Math.max(0, Math.min(slides.length - 1, slide + direction)); renderSlide(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 const connection = () => {
   if (!$('serverUrl').value || !$('username').value || !$('password').value) throw new Error('Enter the server URL, username, and app password.');
-  const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value };
+  const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value, expiresAt: Math.floor(Date.now() / 1000) + Number($('expiry').value) };
   if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value;
   return value;
 };
@@ -30,6 +30,8 @@ $('provider').onchange = () => {
 $('back').onclick = () => move(-1);
 $('next').onclick = () => move(1);
 $('makeToken').onclick = async () => {
+  $('makeToken').disabled = true;
+  show($('made'), 'Creating your secure connection…');
   try {
     const response = await fetch('/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(connection()) });
     const body = await response.json();
@@ -37,12 +39,20 @@ $('makeToken').onclick = async () => {
     const url = '${origin}/mcp/' + body.token;
     $('mcpUrl').value = url;
     $('config').value = JSON.stringify({ mcpServers: { caldav: { type: 'http', url } } }, null, 2);
-    show($('made'), 'Your secure connection is ready.');
+    $('password').value = '';
+    show($('made'), 'Your secure connection is ready. Anyone with this URL can access the configured calendar.');
     $('connect').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (error) { show($('made'), error.message); }
+  } catch (error) { show($('made'), error instanceof Error ? error.message : 'Could not create token.'); }
+  finally { $('makeToken').disabled = false; }
 };
-$('copyUrl').onclick = async () => { await navigator.clipboard.writeText($('mcpUrl').value); show($('connectStatus'), 'MCP URL copied.'); };
-$('copyConfig').onclick = async () => { await navigator.clipboard.writeText($('config').value); show($('connectStatus'), 'Configuration copied.'); };
+const copy = async id => {
+  const value = $(id).value;
+  if (!value) return show($('connectStatus'), 'Create a token first.');
+  try { await navigator.clipboard.writeText(value); show($('connectStatus'), 'Copied to clipboard.'); }
+  catch { show($('connectStatus'), 'Clipboard access failed. Select and copy the text manually.'); }
+};
+$('copyUrl').onclick = () => copy('mcpUrl');
+$('copyConfig').onclick = () => copy('config');
 renderSlide();
 `;
 
@@ -61,6 +71,7 @@ export function homePage(origin: string): Response {
         <label htmlFor="calendarUrl">Calendar URL <span className="fine">(optional — discovery works without it)</span></label><input id="calendarUrl" type="url" placeholder="https://caldav.example.com/calendars/..." />
         <label htmlFor="username">Username</label><input id="username" autoComplete="username" required />
         <label htmlFor="password">App password</label><input id="password" type="password" autoComplete="current-password" required />
+        <label htmlFor="expiry">Token lifetime</label><select id="expiry"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="2592000">30 days</option></select><p className="hint">Short-lived tokens reduce the impact of an accidentally shared MCP URL.</p>
       </section>
       <section data-slide="2" id="connect" className="panel soft" hidden><h2>03 / Connect your AI assistant</h2><p className="hint">Create your secure token, then copy one option into your MCP-compatible assistant.</p>
         <button id="makeToken" className="primary">Create secure token →</button><output id="made" className="status" aria-live="polite" />
@@ -68,10 +79,17 @@ export function homePage(origin: string): Response {
         <label htmlFor="config">Configuration</label><textarea id="config" readOnly placeholder="Your configuration appears here after token creation" /><button id="copyConfig" className="secondary">Copy configuration</button><output id="connectStatus" className="status" aria-live="polite" />
       </section>
       <nav className="navigation" aria-label="Setup navigation"><button id="back" className="secondary" type="button">← Back</button><span id="progress" className="status" aria-live="polite" /><button id="next" className="primary" type="button">Next →</button></nav>
-      <p className="fine">Tokens are permanent and opaque. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke existing tokens. The service stores no calendar data.</p>
+      <p className="fine">Tokens are encrypted and expire by default. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke all existing tokens. The service stores no calendar data.</p>
     </main>
     <script dangerouslySetInnerHTML={{ __html: clientScript(origin) }} />
   </>;
   const html = '<!doctype html>' + renderToStaticMarkup(<html lang="en"><head><meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>CalDAV MCP Forwarder</title></head><body>{app}</body></html>);
-  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+  return new Response(html, { headers: {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+  } });
 }

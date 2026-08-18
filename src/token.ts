@@ -12,6 +12,12 @@ export const connectionSchema = z.object({
 
 export type Connection = z.infer<typeof connectionSchema>;
 
+export function sameSecureOrigin(value: string, trusted: string): boolean {
+  const candidate = new URL(value);
+  const origin = new URL(trusted);
+  return candidate.protocol === 'https:' && candidate.origin === origin.origin;
+}
+
 const decode = (value: string): Uint8Array => {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
   return Uint8Array.from(atob(normalized), (character) => character.charCodeAt(0));
@@ -24,7 +30,9 @@ const encode = (value: Uint8Array): string => {
 };
 
 export async function importTokenKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', decode(secret).buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['decrypt']);
+  const bytes = decode(secret);
+  if (![16, 24, 32].includes(bytes.byteLength)) throw new Error('CONNECTION_TOKEN_KEY must be a valid AES key.');
+  return crypto.subtle.importKey('raw', bytes.buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['decrypt']);
 }
 
 export async function decodeConnectionToken(token: string, secret?: string, allowLegacy = true): Promise<Connection> {
@@ -47,7 +55,9 @@ export async function decodeConnectionToken(token: string, secret?: string, allo
 }
 
 export async function createEncryptedToken(connection: Connection, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', decode(secret).buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['encrypt']);
+  const bytes = decode(secret);
+  if (![16, 24, 32].includes(bytes.byteLength)) throw new Error('CONNECTION_TOKEN_KEY must be a valid AES key.');
+  const key = await crypto.subtle.importKey('raw', bytes.buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['encrypt']);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(connection)));
   return `v1.${encode(iv)}.${encode(new Uint8Array(ciphertext))}`;

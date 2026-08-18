@@ -21,7 +21,7 @@ describe('iCalendar helpers', () => {
     expect(ics).toContain('LOCATION:Room 1\\, East');
     expect(ics).toContain('STATUS:CONFIRMED');
     expect(ics).toContain('ATTENDEE:mailto:a@example.test');
-    expect(ics).toContain('RRULE:FREQ=WEEKLY\\;COUNT=2');
+    expect(ics).toContain('RRULE:FREQ=WEEKLY;COUNT=2');
   });
 
   it('creates a generated UID when one is omitted', () => {

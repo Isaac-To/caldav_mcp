@@ -48,4 +48,8 @@ describe('connection tokens', () => {
     const value = { ...connection, username: 'user+tag@example.test' };
     await expect(decodeConnectionToken(createDevelopmentToken(value))).resolves.toEqual(value);
   });
+
+  it('rejects invalid AES key lengths', async () => {
+    await expect(createEncryptedToken(connection, 'AAAA')).rejects.toThrow('valid AES key');
+  });
 });
