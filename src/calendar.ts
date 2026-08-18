@@ -68,6 +68,30 @@ export async function calendarFor(client: DAVClient, requested?: string, configu
   return calendar;
 }
 
+export type SimpleEvent = {
+  url: string;
+  etag?: string;
+  data: string;
+};
+
+export function simpleCalendar(calendar: DAVCalendar): Record<string, unknown> {
+  return {
+    url: calendar.url,
+    displayName: typeof calendar.displayName === 'string' ? calendar.displayName : undefined,
+    description: typeof calendar.description === 'string' ? calendar.description : undefined,
+    timezone: calendar.timezone,
+    color: calendar.calendarColor,
+  };
+}
+
+export function simpleEvent(object: DAVCalendarObject): SimpleEvent {
+  return { url: object.url, etag: object.etag, data: String(object.data ?? '') };
+}
+
+export function simpleFreeBusy(response: { raw?: unknown }): { data: string } {
+  return { data: String(response.raw ?? '') };
+}
+
 export function objectResult(object: DAVCalendarObject): { content: [{ type: 'text'; text: string }] } {
-  return { content: [{ type: 'text', text: JSON.stringify(object) }] };
+  return { content: [{ type: 'text', text: JSON.stringify(simpleEvent(object)) }] };
 }

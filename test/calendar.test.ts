@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { calendarFor, createICalendar, objectResult, updateICalendar } from '../src/calendar';
+import { calendarFor, createICalendar, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from '../src/calendar';
 
 const baseEvent = { summary: 'Planning', start: '2026-08-20T10:00:00Z', end: '2026-08-20T11:00:00Z' };
 
@@ -72,5 +72,14 @@ describe('calendar selection', () => {
 
   it('formats a calendar object result', () => {
     expect(objectResult({ url: 'https://example.test/event.ics', data: 'DATA' })).toEqual({ content: [{ type: 'text', text: JSON.stringify({ url: 'https://example.test/event.ics', data: 'DATA' }) }] });
+  });
+
+  it('simplifies calendar, event, and free/busy responses', () => {
+    expect(simpleCalendar({ url: 'https://example.test/work/', displayName: 'Work', description: 'Work calendar', timezone: 'UTC', calendarColor: '#fff' })).toEqual({ url: 'https://example.test/work/', displayName: 'Work', description: 'Work calendar', timezone: 'UTC', color: '#fff' });
+    expect(simpleCalendar({ url: 'https://example.test/personal/', displayName: { value: 'Personal' } })).toEqual({ url: 'https://example.test/personal/', displayName: undefined, description: undefined, timezone: undefined, color: undefined });
+    expect(simpleEvent({ url: 'https://example.test/event.ics', etag: 'abc', data: 'DATA' })).toEqual({ url: 'https://example.test/event.ics', etag: 'abc', data: 'DATA' });
+    expect(simpleEvent({ url: 'https://example.test/empty.ics' })).toEqual({ url: 'https://example.test/empty.ics', etag: undefined, data: '' });
+    expect(simpleFreeBusy({ raw: 'FREEBUSY' })).toEqual({ data: 'FREEBUSY' });
+    expect(simpleFreeBusy({})).toEqual({ data: '' });
   });
 });

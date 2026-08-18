@@ -83,6 +83,19 @@ Example requests an assistant could handle:
 
 The assistant should confirm important destructive actions, especially event deletion, before calling the corresponding tool.
 
+## Tool output format
+
+Tool responses use compact JSON with only information needed for the next action:
+
+- Calendar lists contain `url`, plus available `displayName`, `description`, `timezone`, and `color`.
+- Event lists and `get_event` contain `url`, optional `etag`, and the current iCalendar `data`.
+- `create_event` returns the created event `url`.
+- `update_event` returns the updated event `url`.
+- `delete_event` returns the deleted event `url` and `deleted: true`.
+- `get_free_busy` returns only the free/busy iCalendar `data`.
+
+Responses do not include HTTP status codes, raw CalDAV metadata, or presentation formatting.
+
 ## Deployment
 
 Install dependencies:

@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { DAVClient, freeBusyQuery } from 'tsdav';
 import { z } from 'zod';
-import { calendarFor, createICalendar, EventInput, objectResult, updateICalendar } from './calendar';
+import { calendarFor, createICalendar, EventInput, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from './calendar';
 import { Connection, connectionSchema, createEncryptedToken, decodeConnectionToken } from './token';
 import { homePage as reactHomePage } from './ui';
 
@@ -88,14 +88,14 @@ function createServer(connection: Connection): McpServer {
   const client = clientFor(connection);
   const login = async () => { await client.login(); return client; };
 
-  server.registerTool('list_calendars', { description: 'List calendars available in the CalDAV account.', inputSchema: {} }, async () => result(await (await login()).fetchCalendars()));
+  server.registerTool('list_calendars', { description: 'List calendars available in the CalDAV account. Returns each calendar URL and basic metadata.', inputSchema: {} }, async () => result((await (await login()).fetchCalendars()).map(simpleCalendar)));
   server.registerTool('list_events', { description: 'List events in a calendar and optional time range.', inputSchema: { ...calendar, ...range, expand: z.boolean().optional() } }, async ({ calendarUrl, start, end, expand }) => {
     const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl);
-    return result(await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end }, expand }));
+    return result((await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end }, expand })).map(simpleEvent));
   });
   server.registerTool('search_events', { description: 'Search event data in a calendar and optional time range.', inputSchema: { ...calendar, ...range, query: z.string().min(1) } }, async ({ calendarUrl, start, end, query }) => {
     const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl); const objects = await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end } });
-    return result(objects.filter((item) => String(item.data ?? '').toLowerCase().includes(query.toLowerCase())));
+    return result(objects.filter((item) => String(item.data ?? '').toLowerCase().includes(query.toLowerCase())).map(simpleEvent));
   });
   server.registerTool('get_event', { description: 'Read one event by its calendar object URL.', inputSchema: { eventUrl: z.string().url() } }, async ({ eventUrl }) => {
     const c = await login(); const objects = await c.fetchCalendarObjects({ calendar: { url: new URL('.', eventUrl).toString() }, objectUrls: [eventUrl] });
@@ -103,15 +103,15 @@ function createServer(connection: Connection): McpServer {
   });
   server.registerTool('create_event', { description: 'Create an event in a calendar.', inputSchema: { ...calendar, ...eventFields, summary: z.string().min(1), start: z.string(), end: z.string(), filename: z.string().regex(/^[^/]+\.ics$/).optional(), attendees: z.array(z.string()).optional() } }, async (input) => {
     const c = await login(); const cal = await calendarFor(c, input.calendarUrl, connection.calendarUrl); const response = await c.createCalendarObject({ calendar: cal, filename: input.filename ?? `${crypto.randomUUID()}.ics`, iCalString: createICalendar(input as EventInput) });
-    return result({ status: response.status, url: response.headers.get('location') });
+    return result({ url: response.headers.get('location') });
   });
   server.registerTool('update_event', { description: 'Update an existing event using its object URL and current iCalendar data.', inputSchema: { eventUrl: z.string().url(), data: z.string().min(1), ...eventFields } }, async ({ eventUrl, data, ...input }) => {
-    const c = await login(); const response = await c.updateCalendarObject({ calendarObject: { url: eventUrl, data: updateICalendar(data, input) } }); return result({ status: response.status });
+    const c = await login(); await c.updateCalendarObject({ calendarObject: { url: eventUrl, data: updateICalendar(data, input) } }); return result({ url: eventUrl });
   });
   server.registerTool('delete_event', { description: 'Delete an event by its calendar object URL.', inputSchema: { eventUrl: z.string().url(), etag: z.string().optional() } }, async ({ eventUrl, etag }) => {
-    const c = await login(); const response = await c.deleteCalendarObject({ calendarObject: { url: eventUrl, etag } }); return result({ status: response.status });
+    const c = await login(); await c.deleteCalendarObject({ calendarObject: { url: eventUrl, etag } }); return result({ url: eventUrl, deleted: true });
   });
-  server.registerTool('get_free_busy', { description: 'Get free/busy data for a time range.', inputSchema: { url: z.string().url().optional(), ...range } }, async ({ url, start, end }) => result(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} })));
+  server.registerTool('get_free_busy', { description: 'Get free/busy data for a time range. Returns the calendar data only.', inputSchema: { url: z.string().url().optional(), ...range } }, async ({ url, start, end }) => result(simpleFreeBusy(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} }))));
   return server;
 }
 
