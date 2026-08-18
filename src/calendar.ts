@@ -43,7 +43,7 @@ export function updateICalendar(data: string, input: Partial<EventInput>): strin
   const component = ICAL.Component.fromString(data);
   const eventComponent = component.getFirstSubcomponent('vevent');
   if (!eventComponent) throw new Error('Calendar object does not contain a VEVENT.');
-  const set = (name: string, value: string | undefined) => {
+  const set = (name: string, value: unknown) => {
     if (value === undefined) return;
     const property = eventComponent.getFirstProperty(name);
     if (property) property.setValue(value);
@@ -53,9 +53,9 @@ export function updateICalendar(data: string, input: Partial<EventInput>): strin
   set('description', input.description);
   set('location', input.location);
   set('status', input.status?.toUpperCase());
-  if (input.start) set('dtstart', ICAL.Time.fromJSDate(new Date(input.start), true).toICALString());
-  if (input.end) set('dtend', ICAL.Time.fromJSDate(new Date(input.end), true).toICALString());
-  if (input.recurrenceRule) set('rrule', input.recurrenceRule);
+  if (input.start) set('dtstart', ICAL.Time.fromJSDate(new Date(input.start), true));
+  if (input.end) set('dtend', ICAL.Time.fromJSDate(new Date(input.end), true));
+  if (input.recurrenceRule) set('rrule', ICAL.Recur.fromString(input.recurrenceRule));
   if (!eventComponent.getFirstPropertyValue('uid')) throw new Error('Calendar object does not contain a UID.');
   return component.toString();
 }
