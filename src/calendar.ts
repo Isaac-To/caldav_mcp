@@ -68,6 +68,17 @@ export async function calendarFor(client: DAVClient, requested?: string, configu
   return calendar;
 }
 
+export async function calendarsFor(client: DAVClient, requested?: string, configured?: string): Promise<DAVCalendar[]> {
+  const calendars = await client.fetchCalendars();
+  const url = requested ?? configured;
+  if (url) {
+    const calendar = calendars.find((item) => item.url === url);
+    if (!calendar) throw new Error('Calendar not found. Call list_calendars or provide calendarUrl.');
+    return [calendar];
+  }
+  return calendars;
+}
+
 export type SimpleEvent = {
   url: string;
   etag?: string;

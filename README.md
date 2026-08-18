@@ -163,8 +163,8 @@ All tools operate on the calendar selected by `calendarUrl` in the token, or acc
 | Tool | Purpose |
 | --- | --- |
 | `list_calendars` | Discover calendars in the account. |
-| `list_events` | List events for a required `start`/`end` range. |
-| `search_events` | Search returned event data by text. |
+| `list_events` | List events for a required `start`/`end` range. Without `calendarUrl`, searches all calendars. |
+| `search_events` | Search event data by text. Without `calendarUrl`, searches all calendars. |
 | `get_event` | Fetch an event by its object URL. |
 | `create_event` | Create an event with summary, start, and end. |
 | `update_event` | Update an event using its current iCalendar data and object URL. |

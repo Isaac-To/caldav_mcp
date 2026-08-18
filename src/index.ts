@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { DAVClient, freeBusyQuery } from 'tsdav';
 import { z } from 'zod';
-import { calendarFor, createICalendar, EventInput, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from './calendar';
+import { calendarsFor, calendarFor, createICalendar, EventInput, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from './calendar';
 import { Connection, connectionSchema, createEncryptedToken, decodeConnectionToken, secureUrl } from './token';
 import { homePage as reactHomePage } from './ui';
 
@@ -90,12 +90,13 @@ function createServer(connection: Connection): McpServer {
   const login = async () => { await client.login(); return client; };
 
   server.registerTool('list_calendars', { description: 'List calendars available in the CalDAV account. Returns each calendar URL and basic metadata.', inputSchema: {} }, async () => result((await (await login()).fetchCalendars()).map(simpleCalendar)));
-  server.registerTool('list_events', { description: 'List events in a calendar and optional time range.', inputSchema: { ...calendar, ...range, expand: z.boolean().optional() } }, async ({ calendarUrl, start, end, expand }) => {
-    const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl);
-    return result((await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end }, expand })).map(simpleEvent));
+  server.registerTool('list_events', { description: 'List events in a selected calendar, or all calendars when calendarUrl is omitted.', inputSchema: { ...calendar, ...range, expand: z.boolean().optional() } }, async ({ calendarUrl, start, end, expand }) => {
+    const c = await login(); const calendars = await calendarsFor(c, calendarUrl, connection.calendarUrl);
+    const events = (await Promise.all(calendars.map((cal) => c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end }, expand })))).flat();
+    return result(events.map(simpleEvent));
   });
-  server.registerTool('search_events', { description: 'Search event data in a calendar and optional time range.', inputSchema: { ...calendar, ...range, query: z.string().min(1) } }, async ({ calendarUrl, start, end, query }) => {
-    const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl); const objects = await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end } });
+  server.registerTool('search_events', { description: 'Search events in a selected calendar, or all calendars when calendarUrl is omitted.', inputSchema: { ...calendar, ...range, query: z.string().min(1) } }, async ({ calendarUrl, start, end, query }) => {
+    const c = await login(); const calendars = await calendarsFor(c, calendarUrl, connection.calendarUrl); const objects = (await Promise.all(calendars.map((cal) => c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end } })))).flat();
     return result(objects.filter((item) => String(item.data ?? '').toLowerCase().includes(query.toLowerCase())).map(simpleEvent));
   });
   server.registerTool('get_event', { description: 'Read one event by its calendar object URL.', inputSchema: { eventUrl: secureUrl } }, async ({ eventUrl }) => {

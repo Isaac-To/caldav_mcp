@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { calendarFor, createICalendar, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from '../src/calendar';
+import { calendarFor, calendarsFor, createICalendar, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from '../src/calendar';
 
 const baseEvent = { summary: 'Planning', start: '2026-08-20T10:00:00Z', end: '2026-08-20T11:00:00Z' };
 
@@ -68,6 +68,18 @@ describe('calendar selection', () => {
   it('rejects an unavailable calendar', async () => {
     const client = { fetchCalendars: vi.fn().mockResolvedValue([{ url: 'https://example.test/one/' }]) } as never;
     await expect(calendarFor(client, 'https://example.test/missing/')).rejects.toThrow('Calendar not found');
+  });
+
+  it('returns all calendars when no calendar is selected', async () => {
+    const calendars = [{ url: 'https://example.test/one/' }, { url: 'https://example.test/two/' }] as never[];
+    const client = { fetchCalendars: vi.fn().mockResolvedValue(calendars) } as never;
+    await expect(calendarsFor(client)).resolves.toEqual(calendars);
+    await expect(calendarsFor(client, calendars[1].url)).resolves.toEqual([calendars[1]]);
+  });
+
+  it('rejects an unavailable selected calendar', async () => {
+    const client = { fetchCalendars: vi.fn().mockResolvedValue([{ url: 'https://example.test/one/' }]) } as never;
+    await expect(calendarsFor(client, 'https://example.test/missing/')).rejects.toThrow('Calendar not found');
   });
 
   it('formats a calendar object result', () => {
