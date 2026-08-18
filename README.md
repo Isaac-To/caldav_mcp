@@ -2,6 +2,8 @@
 
 A completely stateless [Model Context Protocol](https://modelcontextprotocol.io/) server that forwards calendar operations to a CalDAV server from Cloudflare Workers.
 
+Source code and deployment guidance are available in the [GitHub repository](https://github.com/Isaac-To/caldav_mcp).
+
 > **Status:** Functional first release. The Worker supports calendar discovery, event listing/search, event retrieval, creation, updates, deletion, and free/busy queries.
 
 ## Connect in three steps

@@ -129,6 +129,7 @@ export function homePage(origin: string): Response {
       </section>
       <nav className="navigation" aria-label="Setup navigation"><button id="back" className="secondary" type="button">← Back</button><span id="progress" className="status" aria-live="polite" /><button id="next" className="primary" type="button">Next →</button></nav><button id="startOver" className="secondary" type="button">Start over</button>
       <p className="fine">Tokens are encrypted and do not expire unless you choose a lifetime above. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke all existing tokens. The service stores no calendar data.</p>
+      <p className="fine"><a href="https://github.com/Isaac-To/caldav_mcp" target="_blank" rel="noreferrer">View this project on GitHub</a></p>
     </main>
     <script dangerouslySetInnerHTML={{ __html: clientScript(origin) }} />
   </>;
