@@ -4,27 +4,21 @@ A completely stateless [Model Context Protocol](https://modelcontextprotocol.io/
 
 > **Status:** Functional first release. The Worker supports calendar discovery, event listing/search, event retrieval, creation, updates, deletion, and free/busy queries.
 
-## What it does
+## Connect in three steps
 
-This server lets an MCP-compatible AI assistant work with a CalDAV account without storing calendars, events, credentials, or sessions in this service.
+1. Open the deployed Worker URL in a browser.
+2. Enter your CalDAV server, username, and app password. Leave **Calendar URL** blank to discover calendars automatically.
+3. Click **Make secure token**, then copy the generated MCP URL or configuration into your AI assistant.
 
-Supported operations will include:
+The public page only creates encrypted, expiring tokens. Credentials are sent over HTTPS to the Worker for encryption and are never displayed back or decoded in the browser.
 
-- List calendars
-- List and search events
-- Read an event
-- Create an event
-- Edit an event
-- Delete an event
-- Check availability and free/busy information as provider support allows
-
-Each request is handled independently. The service does not use KV, D1, R2, Durable Objects, or a persistent session store.
+The assistant can list, search, read, create, update, and delete events, and query free/busy information. Every request is independent; no calendars, credentials, or sessions are stored.
 
 ## Security model
 
 Do not place raw passwords, app passwords, or access tokens directly in a URL. URLs may be retained by browser history, reverse proxies, analytics systems, and access logs.
 
-For local development, the connection format is a URL-safe base64 connection token:
+Connection tokens are encrypted AES-GCM values:
 
 ```text
 POST https://your-worker.example.com/mcp/<encrypted-connection-token>
@@ -42,7 +36,7 @@ The token represents connection details such as:
 }
 ```
 
-The Worker decodes the token for the duration of one request and discards the values afterward. Base64 is encoding, not encryption. For production, use an AES-GCM token beginning with `v1.` and configure `CONNECTION_TOKEN_KEY` as a Worker secret. The token key must be a URL-safe base64 encoding of a 128-, 192-, or 256-bit key.
+The Worker decrypts each token for one request and discards the connection details afterward. Configure `CONNECTION_TOKEN_KEY` as a Worker secret. The key must be URL-safe base64 containing a 128-, 192-, or 256-bit AES key.
 
 Prefer provider-specific app passwords or OAuth access tokens over a primary account password. Never commit tokens or credentials to this repository.
 
@@ -68,17 +62,6 @@ For an MCP client configuration that accepts a remote HTTP server, use the endpo
 ```
 
 Do not paste the example token above into a real client. Replace it with a token generated for the intended CalDAV account and calendar.
-
-### Generate a token in the browser
-
-Open the deployed Worker’s main page at `https://your-worker.example.com/`. It includes a token tool with two options:
-
-1. Enter the CalDAV server URL, optional calendar URL, username, app password, and expiration.
-2. Choose **Make development token** for local testing, or **Make encrypted token** for production.
-3. Copy the generated token into the MCP URL.
-4. Use **Decode token** to inspect a token. Decoding happens in the browser and requires the encryption key for encrypted tokens.
-
-The development option is base64 encoding only and must not be used for production. The encrypted option requires the Worker’s `CONNECTION_TOKEN_KEY` and keeps credentials encrypted in the URL.
 
 The assistant will be able to call tools such as:
 

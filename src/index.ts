@@ -3,7 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { DAVClient, freeBusyQuery } from 'tsdav';
 import { z } from 'zod';
 import { calendarFor, createICalendar, EventInput, objectResult, updateICalendar } from './calendar';
-import { Connection, decodeConnectionToken } from './token';
+import { Connection, connectionSchema, createEncryptedToken, decodeConnectionToken } from './token';
 
 interface Env { CONNECTION_TOKEN_KEY?: string }
 const range = { start: z.string(), end: z.string() };
@@ -25,6 +25,7 @@ function homePage(origin: string): Response {
     body { max-width: 760px; margin: 0 auto; padding: 2rem 1rem; line-height: 1.5; }
     h1 { margin-bottom: .25rem; } .muted { color: #777; }
     .card { border: 1px solid #8885; border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+    ol { padding-left: 1.4rem; } li { margin: .4rem 0; }
     label { display: block; font-weight: 600; margin-top: .8rem; }
     input, textarea { box-sizing: border-box; width: 100%; padding: .65rem; margin-top: .25rem; border: 1px solid #8888; border-radius: 6px; font: inherit; }
     textarea { min-height: 7rem; resize: vertical; } button { cursor: pointer; padding: .65rem 1rem; margin: .8rem .4rem 0 0; border: 0; border-radius: 6px; font-weight: 600; }
@@ -35,38 +36,49 @@ function homePage(origin: string): Response {
 </head>
 <body>
   <h1>CalDAV MCP Forwarder</h1>
-  <p class="muted">Stateless calendar access for MCP-compatible assistants.</p>
-  <div class="warning"><strong>Privacy:</strong> token values contain CalDAV credentials. This page processes them in your browser, but do not use this tool on a shared or untrusted computer. Use encrypted tokens for production.</div>
+  <p class="muted">Connect your AI assistant to a CalDAV calendar in three steps.</p>
+  <ol><li>Enter your CalDAV details below.</li><li>Make a token.</li><li>Paste the generated MCP URL into your AI assistant.</li></ol>
+  <div class="warning"><strong>Use an app password</strong> when your calendar provider supports it. Your details are processed in this browser and are not sent to this page.</div>
   <section class="card">
-    <h2>Make a connection token</h2>
-    <p>Use <strong>Development token</strong> for local testing. It is only encoded, not encrypted. Use <strong>Encrypted token</strong> when <code>CONNECTION_TOKEN_KEY</code> is configured on the Worker.</p>
-    <label for="serverUrl">CalDAV server URL</label><input id="serverUrl" type="url" placeholder="https://caldav.example.com" autocomplete="url">
-    <label for="calendarUrl">Calendar URL <span class="muted">(optional)</span></label><input id="calendarUrl" type="url" placeholder="https://caldav.example.com/calendars/user/work/">
+    <h2>1. Calendar details</h2>
+    <label for="provider">Calendar provider</label><select id="provider"><option value="">Choose a provider</option><option value="nextcloud">Nextcloud</option><option value="fastmail">Fastmail</option><option value="icloud">iCloud</option><option value="other">Other</option></select>
+    <p id="providerHelp" class="muted">Choose a provider for a quick hint, or choose Other.</p>
+    <label for="serverUrl">CalDAV server URL</label><input id="serverUrl" type="url" placeholder="https://caldav.example.com" autocomplete="url" required>
+    <label for="calendarUrl">Calendar URL <span class="muted">(optional — leave blank to discover calendars)</span></label><input id="calendarUrl" type="url" placeholder="https://caldav.example.com/calendars/user/work/">
     <label for="username">Username</label><input id="username" autocomplete="username">
     <label for="password">App password</label><input id="password" type="password" autocomplete="current-password">
-    <label for="expiresAt">Expires in hours <span class="muted">(optional)</span></label><input id="expiresAt" type="number" min="1" placeholder="24">
-    <label for="secret">Encryption key <span class="muted">(only for encrypted tokens)</span></label><input id="secret" type="password" placeholder="URL-safe base64 key">
-    <button class="primary" id="makeDev">Make development token</button><button class="primary" id="makeEncrypted">Make encrypted token</button>
+    <label for="expiresAt">Token lifetime in hours <span class="muted">(optional)</span></label><input id="expiresAt" type="number" min="1" max="168" placeholder="24">
+    <p class="muted">Your details are sent over HTTPS to create an encrypted, expiring token. The encryption key never leaves this server.</p>
+    <button class="primary" id="makeEncrypted">Make secure token</button>
     <output id="made" aria-live="polite"></output>
   </section>
   <section class="card">
-    <h2>Decode a token</h2>
-    <p>Decoding happens locally in this browser. Encrypted tokens require the same encryption key used by the Worker.</p>
+    <h2>2. Connect your AI assistant</h2>
+    <p>Copy the URL or configuration below into your MCP-compatible AI assistant.</p>
+    <label for="mcpUrl">MCP URL</label><textarea id="mcpUrl" readonly placeholder="Your MCP URL will appear here"></textarea><button class="secondary" id="copyUrl">Copy MCP URL</button>
+    <label for="config">Configuration</label><textarea id="config" readonly placeholder="Your configuration will appear here"></textarea><button class="secondary" id="copyConfig">Copy configuration</button>
+    <output id="connectStatus" aria-live="polite"></output>
+  </section>
+  <details class="card">
+    <summary><strong>Decode a token</strong></summary>
+    <p>Tokens are intentionally opaque. For safety, this public page cannot decode credentials.</p>
     <label for="token">Token</label><textarea id="token" placeholder="Paste a token here"></textarea>
     <button class="secondary" id="decode">Decode token</button><output id="decoded" aria-live="polite"></output>
-  </section>
-  <section class="card"><h2>Connect your MCP client</h2><p>Use this URL after generating a token:</p><output>${origin}/mcp/&lt;token&gt;</output><p>See the <a href="/README.md">README</a> for MCP client configuration and tool details.</p></section>
+  </details>
+  <p class="muted">Need help? Use an app password and check your provider’s CalDAV settings. The server administrator must configure <code>CONNECTION_TOKEN_KEY</code> for secure tokens.</p>
 <script>
 const $ = (id) => document.getElementById(id);
 const b64 = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, ''); };
 const bytes = (text) => new TextEncoder().encode(text);
-const fromB64 = (value) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=')), c => c.charCodeAt(0));
-const key = (secret, usage) => crypto.subtle.importKey('raw', fromB64(secret).buffer, { name: 'AES-GCM' }, false, [usage]);
-const connection = () => { const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value }; if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value; if ($('expiresAt').value) value.expiresAt = Math.floor(Date.now() / 1000) + Number($('expiresAt').value) * 3600; return value; };
+const connection = () => { if (!$('serverUrl').value || !$('username').value || !$('password').value) throw new Error('Enter the server URL, username, and app password.'); const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value }; if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value; if ($('expiresAt').value) value.expiresAt = Math.floor(Date.now() / 1000) + Number($('expiresAt').value) * 3600; return value; };
 const show = (element, value) => { element.textContent = value; };
-$('makeDev').onclick = () => { try { const token = b64(bytes(JSON.stringify(connection()))); show($('made'), token); $('token').value = token; } catch (e) { show($('made'), e.message); } };
-$('makeEncrypted').onclick = async () => { try { if (!$('secret').value) throw new Error('Enter the base64 encryption key.'); const iv = crypto.getRandomValues(new Uint8Array(12)); const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key($('secret').value, 'encrypt'), bytes(JSON.stringify(connection()))); const token = 'v1.' + b64(iv) + '.' + b64(new Uint8Array(encrypted)); show($('made'), token); $('token').value = token; } catch (e) { show($('made'), e.message); } };
-$('decode').onclick = async () => { try { const token = $('token').value.trim(); let data; if (token.startsWith('v1.')) { if (!$('secret').value) throw new Error('Enter the base64 encryption key.'); const [, iv, ciphertext] = token.split('.'); const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(iv) }, await key($('secret').value, 'decrypt'), fromB64(ciphertext)); data = new TextDecoder().decode(plain); } else data = new TextDecoder().decode(fromB64(token)); show($('decoded'), JSON.stringify(JSON.parse(data), null, 2)); } catch (e) { show($('decoded'), 'Could not decode token: ' + e.message); } };
+$('provider').onchange = () => { const hints = { nextcloud: 'Nextcloud usually uses an app password and a calendar URL from the Calendar app.', fastmail: 'Fastmail uses an app-specific password and its CalDAV server URL.', icloud: 'iCloud requires an app-specific password; use the CalDAV URL from Apple’s account settings.', other: 'Use the CalDAV URL and app password supplied by your provider.' }; show($('providerHelp'), hints[$('provider').value] || 'Choose a provider for a quick hint, or choose Other.'); };
+const finish = (token) => { const url = '${origin}/mcp/' + token; $('token').value = token; $('mcpUrl').value = url; $('config').value = JSON.stringify({ mcpServers: { caldav: { type: 'http', url } } }, null, 2); show($('made'), 'Token created. Copy the MCP URL or configuration below.'); };
+$('makeDev').onclick = () => { try { finish(b64(bytes(JSON.stringify(connection())))); } catch (e) { show($('made'), e.message); } };
+$('makeEncrypted').onclick = async () => { try { const response = await fetch('/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(connection()) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Could not create token.'); finish(body.token); } catch (e) { show($('made'), e.message); } };
+$('copyUrl').onclick = async () => { if (!$('mcpUrl').value) return show($('connectStatus'), 'Make a token first.'); await navigator.clipboard.writeText($('mcpUrl').value); show($('connectStatus'), 'MCP URL copied.'); };
+$('copyConfig').onclick = async () => { if (!$('config').value) return show($('connectStatus'), 'Make a token first.'); await navigator.clipboard.writeText($('config').value); show($('connectStatus'), 'Configuration copied.'); };
+$('decode').onclick = () => show($('decoded'), 'Tokens are encrypted and cannot be decoded in the public browser tool.');
 </script>
 </body></html>`;
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
@@ -107,6 +119,18 @@ function createServer(connection: Connection): McpServer {
 export default { async fetch(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === '/') return homePage(url.origin);
+  if (url.pathname === '/token') {
+    if (request.method !== 'POST') return Response.json({ error: 'Use POST to create a token.' }, { status: 405 });
+    if (!env.CONNECTION_TOKEN_KEY) return Response.json({ error: 'Token creation is not configured.' }, { status: 503 });
+    try {
+      const input = connectionSchema.parse(await request.json());
+      if (input.expiresAt && input.expiresAt > Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60) {
+        return Response.json({ error: 'Token lifetime cannot exceed 7 days.' }, { status: 400, headers: { 'cache-control': 'no-store' } });
+      }
+      const token = await createEncryptedToken(input, env.CONNECTION_TOKEN_KEY);
+      return Response.json({ token }, { headers: { 'cache-control': 'no-store' } });
+    } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Invalid connection details.' }, { status: 400, headers: { 'cache-control': 'no-store' } }); }
+  }
   if (!url.pathname.startsWith('/mcp/')) return Response.json({ error: 'Not found' }, { status: 404 });
   if (request.method !== 'POST') return Response.json({ error: 'Use POST for the stateless MCP endpoint.' }, { status: 405 });
   try {
