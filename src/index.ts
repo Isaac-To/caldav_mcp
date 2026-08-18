@@ -47,8 +47,7 @@ function homePage(origin: string): Response {
     <label for="calendarUrl">Calendar URL <span class="muted">(optional — leave blank to discover calendars)</span></label><input id="calendarUrl" type="url" placeholder="https://caldav.example.com/calendars/user/work/">
     <label for="username">Username</label><input id="username" autocomplete="username">
     <label for="password">App password</label><input id="password" type="password" autocomplete="current-password">
-    <label for="expiresAt">Token lifetime in hours <span class="muted">(optional)</span></label><input id="expiresAt" type="number" min="1" max="168" placeholder="24">
-    <p class="muted">Your details are sent over HTTPS to create an encrypted, expiring token. The encryption key never leaves this server.</p>
+    <p class="muted">Your details are sent over HTTPS to create an encrypted token. This token does not expire. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke existing tokens.</p>
     <button class="primary" id="makeEncrypted">Make secure token</button>
     <output id="made" aria-live="polite"></output>
   </section>
@@ -70,7 +69,7 @@ function homePage(origin: string): Response {
 const $ = (id) => document.getElementById(id);
 const b64 = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, ''); };
 const bytes = (text) => new TextEncoder().encode(text);
-const connection = () => { if (!$('serverUrl').value || !$('username').value || !$('password').value) throw new Error('Enter the server URL, username, and app password.'); const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value }; if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value; if ($('expiresAt').value) value.expiresAt = Math.floor(Date.now() / 1000) + Number($('expiresAt').value) * 3600; return value; };
+const connection = () => { if (!$('serverUrl').value || !$('username').value || !$('password').value) throw new Error('Enter the server URL, username, and app password.'); const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value }; if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value; return value; };
 const show = (element, value) => { element.textContent = value; };
 $('provider').onchange = () => { const hints = { nextcloud: 'Nextcloud usually uses an app password and a calendar URL from the Calendar app.', fastmail: 'Fastmail uses an app-specific password and its CalDAV server URL.', icloud: 'iCloud requires an app-specific password; use the CalDAV URL from Apple’s account settings.', other: 'Use the CalDAV URL and app password supplied by your provider.' }; show($('providerHelp'), hints[$('provider').value] || 'Choose a provider for a quick hint, or choose Other.'); };
 const finish = (token) => { const url = '${origin}/mcp/' + token; $('token').value = token; $('mcpUrl').value = url; $('config').value = JSON.stringify({ mcpServers: { caldav: { type: 'http', url } } }, null, 2); show($('made'), 'Token created. Copy the MCP URL or configuration below.'); };
@@ -124,9 +123,6 @@ export default { async fetch(request: Request, env: Env): Promise<Response> {
     if (!env.CONNECTION_TOKEN_KEY) return Response.json({ error: 'Token creation is not configured.' }, { status: 503 });
     try {
       const input = connectionSchema.parse(await request.json());
-      if (input.expiresAt && input.expiresAt > Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60) {
-        return Response.json({ error: 'Token lifetime cannot exceed 7 days.' }, { status: 400, headers: { 'cache-control': 'no-store' } });
-      }
       const token = await createEncryptedToken(input, env.CONNECTION_TOKEN_KEY);
       return Response.json({ token }, { headers: { 'cache-control': 'no-store' } });
     } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Invalid connection details.' }, { status: 400, headers: { 'cache-control': 'no-store' } }); }
