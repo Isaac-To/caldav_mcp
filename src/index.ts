@@ -4,6 +4,7 @@ import { DAVClient, freeBusyQuery } from 'tsdav';
 import { z } from 'zod';
 import { calendarFor, createICalendar, EventInput, objectResult, updateICalendar } from './calendar';
 import { Connection, connectionSchema, createEncryptedToken, decodeConnectionToken } from './token';
+import { homePage as reactHomePage } from './ui';
 
 interface Env { CONNECTION_TOKEN_KEY?: string }
 const range = { start: z.string(), end: z.string() };
@@ -116,7 +117,7 @@ function createServer(connection: Connection): McpServer {
 
 export default { async fetch(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname === '/') return homePage(url.origin);
+  if (url.pathname === '/') return reactHomePage(url.origin);
   if (url.pathname === '/token') {
     if (request.method !== 'POST') return Response.json({ error: 'Use POST to create a token.' }, { status: 405 });
     if (!env.CONNECTION_TOKEN_KEY) return Response.json({ error: 'Token creation is not configured.' }, { status: 503 });
