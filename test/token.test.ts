@@ -35,6 +35,15 @@ describe('connection tokens', () => {
     await expect(decodeConnectionToken(token)).rejects.toThrow();
   });
 
+  it('requires HTTPS connection URLs', async () => {
+    const token = createDevelopmentToken({ ...connection, serverUrl: 'http://caldav.example.test' });
+    await expect(decodeConnectionToken(token)).rejects.toThrow('HTTPS URL required');
+  });
+
+  it('can disable legacy plaintext tokens', async () => {
+    await expect(decodeConnectionToken(createDevelopmentToken(connection), undefined, false)).rejects.toThrow('Legacy connection tokens');
+  });
+
   it('supports URL-safe base64 payloads', async () => {
     const value = { ...connection, username: 'user+tag@example.test' };
     await expect(decodeConnectionToken(createDevelopmentToken(value))).resolves.toEqual(value);

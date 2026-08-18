@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
+export const secureUrl = z.string().url().refine((value) => new URL(value).protocol === 'https:', 'HTTPS URL required.');
+
 export const connectionSchema = z.object({
-  serverUrl: z.string().url(),
-  username: z.string().min(1),
-  password: z.string().min(1),
-  calendarUrl: z.string().url().optional(),
+  serverUrl: secureUrl,
+  username: z.string().min(1).max(256),
+  password: z.string().min(1).max(1024),
+  calendarUrl: secureUrl.optional(),
   expiresAt: z.number().int().positive().optional(),
 });
 
@@ -25,7 +27,7 @@ export async function importTokenKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', decode(secret).buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['decrypt']);
 }
 
-export async function decodeConnectionToken(token: string, secret?: string): Promise<Connection> {
+export async function decodeConnectionToken(token: string, secret?: string, allowLegacy = true): Promise<Connection> {
   let value: unknown;
   if (token.startsWith('v1.')) {
     if (!secret) throw new Error('Encrypted connection tokens require CONNECTION_TOKEN_KEY.');
@@ -34,6 +36,7 @@ export async function decodeConnectionToken(token: string, secret?: string): Pro
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(iv).buffer as ArrayBuffer }, key, decode(ciphertext).buffer as ArrayBuffer);
     value = JSON.parse(new TextDecoder().decode(plaintext));
   } else {
+    if (!allowLegacy) throw new Error('Legacy connection tokens are disabled.');
     value = JSON.parse(new TextDecoder().decode(decode(token)));
   }
   const connection = connectionSchema.parse(value);

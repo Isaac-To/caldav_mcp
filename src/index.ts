@@ -3,15 +3,16 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { DAVClient, freeBusyQuery } from 'tsdav';
 import { z } from 'zod';
 import { calendarFor, createICalendar, EventInput, objectResult, simpleCalendar, simpleEvent, simpleFreeBusy, updateICalendar } from './calendar';
-import { Connection, connectionSchema, createEncryptedToken, decodeConnectionToken } from './token';
+import { Connection, connectionSchema, createEncryptedToken, decodeConnectionToken, secureUrl } from './token';
 import { homePage as reactHomePage } from './ui';
 
 interface Env { CONNECTION_TOKEN_KEY?: string }
 const range = { start: z.string(), end: z.string() };
-const calendar = { calendarUrl: z.string().url().optional() };
+const calendar = { calendarUrl: secureUrl.optional() };
 const eventFields = { summary: z.string().optional(), start: z.string().optional(), end: z.string().optional(), description: z.string().optional(), location: z.string().optional(), status: z.string().optional(), recurrenceRule: z.string().optional() };
 
 function result(value: unknown) { return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] }; }
+function securityHeaders(): HeadersInit { return { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; frame-ancestors 'none'" }; }
 function clientFor(connection: Connection) { return new DAVClient({ serverUrl: connection.serverUrl, credentials: { username: connection.username, password: connection.password }, authMethod: 'Basic', defaultAccountType: 'caldav' }); }
 
 function homePage(origin: string): Response {
@@ -80,7 +81,7 @@ $('copyConfig').onclick = async () => { if (!$('config').value) return show($('c
 $('decode').onclick = () => show($('decoded'), 'Tokens are encrypted and cannot be decoded in the public browser tool.');
 </script>
 </body></html>`;
-  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+  return new Response(html, { headers: { ...securityHeaders(), 'content-type': 'text/html; charset=utf-8', 'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'" } });
 }
 
 function createServer(connection: Connection): McpServer {
@@ -97,7 +98,7 @@ function createServer(connection: Connection): McpServer {
     const c = await login(); const cal = await calendarFor(c, calendarUrl, connection.calendarUrl); const objects = await c.fetchCalendarObjects({ calendar: cal, timeRange: { start, end } });
     return result(objects.filter((item) => String(item.data ?? '').toLowerCase().includes(query.toLowerCase())).map(simpleEvent));
   });
-  server.registerTool('get_event', { description: 'Read one event by its calendar object URL.', inputSchema: { eventUrl: z.string().url() } }, async ({ eventUrl }) => {
+  server.registerTool('get_event', { description: 'Read one event by its calendar object URL.', inputSchema: { eventUrl: secureUrl } }, async ({ eventUrl }) => {
     const c = await login(); const objects = await c.fetchCalendarObjects({ calendar: { url: new URL('.', eventUrl).toString() }, objectUrls: [eventUrl] });
     if (!objects[0]) throw new Error('Event not found.'); return objectResult(objects[0]);
   });
@@ -105,13 +106,13 @@ function createServer(connection: Connection): McpServer {
     const c = await login(); const cal = await calendarFor(c, input.calendarUrl, connection.calendarUrl); const response = await c.createCalendarObject({ calendar: cal, filename: input.filename ?? `${crypto.randomUUID()}.ics`, iCalString: createICalendar(input as EventInput) });
     return result({ url: response.headers.get('location') });
   });
-  server.registerTool('update_event', { description: 'Update an existing event using its object URL and current iCalendar data.', inputSchema: { eventUrl: z.string().url(), data: z.string().min(1), ...eventFields } }, async ({ eventUrl, data, ...input }) => {
+  server.registerTool('update_event', { description: 'Update an existing event using its object URL and current iCalendar data.', inputSchema: { eventUrl: secureUrl, data: z.string().min(1), ...eventFields } }, async ({ eventUrl, data, ...input }) => {
     const c = await login(); await c.updateCalendarObject({ calendarObject: { url: eventUrl, data: updateICalendar(data, input) } }); return result({ url: eventUrl });
   });
-  server.registerTool('delete_event', { description: 'Delete an event by its calendar object URL.', inputSchema: { eventUrl: z.string().url(), etag: z.string().optional() } }, async ({ eventUrl, etag }) => {
+  server.registerTool('delete_event', { description: 'Delete an event by its calendar object URL.', inputSchema: { eventUrl: secureUrl, etag: z.string().max(512).optional() } }, async ({ eventUrl, etag }) => {
     const c = await login(); await c.deleteCalendarObject({ calendarObject: { url: eventUrl, etag } }); return result({ url: eventUrl, deleted: true });
   });
-  server.registerTool('get_free_busy', { description: 'Get free/busy data for a time range. Returns the calendar data only.', inputSchema: { url: z.string().url().optional(), ...range } }, async ({ url, start, end }) => result(simpleFreeBusy(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} }))));
+  server.registerTool('get_free_busy', { description: 'Get free/busy data for a time range. Returns the calendar data only.', inputSchema: { url: secureUrl.optional(), ...range } }, async ({ url, start, end }) => result(simpleFreeBusy(await freeBusyQuery({ url: url ?? connection.serverUrl, timeRange: { start, end }, headers: {} }))));
   return server;
 }
 
@@ -119,19 +120,21 @@ export default { async fetch(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === '/') return reactHomePage(url.origin);
   if (url.pathname === '/token') {
-    if (request.method !== 'POST') return Response.json({ error: 'Use POST to create a token.' }, { status: 405 });
-    if (!env.CONNECTION_TOKEN_KEY) return Response.json({ error: 'Token creation is not configured.' }, { status: 503 });
+    if (request.method !== 'POST') return Response.json({ error: 'Method not allowed.' }, { status: 405, headers: securityHeaders() });
+    if (!env.CONNECTION_TOKEN_KEY) return Response.json({ error: 'Token creation is not configured.' }, { status: 503, headers: securityHeaders() });
+    if (request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') return Response.json({ error: 'JSON required.' }, { status: 415, headers: securityHeaders() });
     try {
       const input = connectionSchema.parse(await request.json());
       const token = await createEncryptedToken(input, env.CONNECTION_TOKEN_KEY);
-      return Response.json({ token }, { headers: { 'cache-control': 'no-store' } });
-    } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Invalid connection details.' }, { status: 400, headers: { 'cache-control': 'no-store' } }); }
+      return Response.json({ token }, { headers: securityHeaders() });
+    } catch { return Response.json({ error: 'Invalid connection details.' }, { status: 400, headers: securityHeaders() }); }
   }
-  if (!url.pathname.startsWith('/mcp/')) return Response.json({ error: 'Not found' }, { status: 404 });
-  if (request.method !== 'POST') return Response.json({ error: 'Use POST for the stateless MCP endpoint.' }, { status: 405 });
+  if (!url.pathname.startsWith('/mcp/')) return Response.json({ error: 'Not found.' }, { status: 404, headers: securityHeaders() });
+  if (request.method !== 'POST') return Response.json({ error: 'Method not allowed.' }, { status: 405, headers: securityHeaders() });
+  if (url.pathname.length > 4096) return Response.json({ error: 'Invalid request.' }, { status: 400, headers: securityHeaders() });
   try {
-    const connection = await decodeConnectionToken(url.pathname.slice(5), env.CONNECTION_TOKEN_KEY);
+    const connection = await decodeConnectionToken(url.pathname.slice(5), env.CONNECTION_TOKEN_KEY, false);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await createServer(connection).connect(transport); return await transport.handleRequest(request);
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Invalid request' }, { status: 400 }); }
+  } catch { return Response.json({ error: 'Invalid request.' }, { status: 400, headers: securityHeaders() }); }
 } };
