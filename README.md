@@ -7,8 +7,8 @@ A completely stateless [Model Context Protocol](https://modelcontextprotocol.io/
 ## Connect in three steps
 
 1. Open `https://caldavmcp.anpc.work` in a browser.
-2. Enter your CalDAV server, username, and app password. Leave **Calendar URL** blank to discover calendars automatically.
-3. Click **Make secure token**, then copy the generated MCP URL or configuration into your AI assistant.
+2. Enter your CalDAV server, username, and app password, then click **Test connection**. Leave **Calendar URL** blank to discover calendars automatically.
+3. Choose a default calendar if desired, create the secure token, then copy the generated MCP URL or configuration into your AI assistant.
 
 The public page creates encrypted tokens with no expiration by default for a set-and-forget connection. You can optionally choose a shorter lifetime. Credentials are sent over HTTPS to the Worker for encryption and are never decoded in the browser. Rotate `CONNECTION_TOKEN_KEY` if tokens need to be revoked.
 

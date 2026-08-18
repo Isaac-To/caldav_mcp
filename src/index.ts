@@ -140,6 +140,18 @@ export default { async fetch(request: Request, env: Env): Promise<Response> {
       return Response.json({ token }, { headers: securityHeaders() });
     } catch { return Response.json({ error: 'Invalid connection details.' }, { status: 400, headers: securityHeaders() }); }
   }
+  if (url.pathname === '/connection-test') {
+    if (!env.CONNECTION_TOKEN_KEY) return Response.json({ error: 'Connection testing is not configured.' }, { status: 503, headers: securityHeaders() });
+    if (request.method !== 'POST') return Response.json({ error: 'Method not allowed.' }, { status: 405, headers: securityHeaders() });
+    if (request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') return Response.json({ error: 'JSON required.' }, { status: 415, headers: securityHeaders() });
+    try {
+      const connection = connectionSchema.parse(await request.json());
+      const client = clientFor(connection);
+      await client.login();
+      const calendars = (await client.fetchCalendars()).map(simpleCalendar);
+      return Response.json({ calendars }, { headers: securityHeaders() });
+    } catch { return Response.json({ error: 'Could not connect. Check the server URL, username, and app password.' }, { status: 400, headers: securityHeaders() }); }
+  }
   if (!url.pathname.startsWith('/mcp/')) return Response.json({ error: 'Not found.' }, { status: 404, headers: securityHeaders() });
   if (request.method !== 'POST') return Response.json({ error: 'Method not allowed.' }, { status: 405, headers: securityHeaders() });
   if (url.pathname.length > 4096) return Response.json({ error: 'Invalid request.' }, { status: 400, headers: securityHeaders() });

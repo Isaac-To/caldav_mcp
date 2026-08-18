@@ -16,6 +16,26 @@ const connection = () => {
   if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value;
   return value;
 };
+const testConnection = async () => {
+  const button = $('testConnection');
+  button.disabled = true;
+  show($('connectionStatus'), 'Testing connection…');
+  try {
+    const response = await fetch('/connection-test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(connection()) });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || 'Could not connect.');
+    const calendars = body.calendars || [];
+    $('calendarChoices').replaceChildren(...calendars.map(calendar => {
+      const option = document.createElement('option');
+      option.value = calendar.url;
+      option.textContent = calendar.displayName || calendar.url;
+      return option;
+    }));
+    $('calendarChoicesWrap').hidden = calendars.length === 0;
+    show($('connectionStatus'), calendars.length ? 'Connected. Found ' + calendars.length + ' calendar' + (calendars.length === 1 ? '' : 's') + '.' : 'Connected, but no calendars were found.');
+  } catch (error) { show($('connectionStatus'), error instanceof Error ? error.message : 'Could not connect.'); }
+  finally { button.disabled = false; }
+};
 $('provider').onchange = () => {
   const settings = {
     nextcloud: { hint: 'Use an app password from your Nextcloud security settings. Your server URL depends on your organization.', server: '', placeholder: 'https://cloud.example.com' },
@@ -30,6 +50,8 @@ $('provider').onchange = () => {
 };
 $('back').onclick = () => move(-1);
 $('next').onclick = () => move(1);
+$('testConnection').onclick = () => testConnection();
+$('calendarChoices').onchange = () => { if ($('calendarChoices').value) $('calendarUrl').value = $('calendarChoices').value; };
 $('makeToken').onclick = async () => {
   $('makeToken').disabled = true;
   show($('made'), 'Creating your secure connection…');
@@ -72,6 +94,8 @@ export function homePage(origin: string): Response {
         <label htmlFor="calendarUrl">Calendar URL <span className="fine">(optional — discovery works without it)</span></label><input id="calendarUrl" type="url" placeholder="https://caldav.example.com/calendars/..." />
         <label htmlFor="username">Username</label><input id="username" autoComplete="username" required />
         <label htmlFor="password">App password</label><input id="password" type="password" autoComplete="current-password" required />
+        <button id="testConnection" className="secondary" type="button">Test connection</button><output id="connectionStatus" className="status" aria-live="polite" />
+        <div id="calendarChoicesWrap" hidden><label htmlFor="calendarChoices">Default calendar</label><select id="calendarChoices"><option value="">Choose a calendar</option></select><p className="hint">Selecting a calendar makes event creation less ambiguous.</p></div>
         <label htmlFor="expiry">Token lifetime</label><select id="expiry"><option value="" selected>No expiration</option><option value="3600">1 hour</option><option value="86400">1 day</option><option value="2592000">30 days</option></select><p className="hint">No expiration is convenient for a set-and-forget connection. Anyone with the MCP URL can access the configured calendar.</p>
       </section>
       <section data-slide="2" id="connect" className="panel soft" hidden><h2>03 / Connect your AI assistant</h2><p className="hint">Create your secure token, then copy one option into your MCP-compatible assistant.</p>
