@@ -3,5 +3,14 @@
   "name": "caldav-mcp-forwarder",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-18",
-  "workers_dev": true
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "caldavmcp.anpc.work",
+      "custom_domain": true
+    }
+  ],
+  "secrets": {
+    "required": ["CONNECTION_TOKEN_KEY"]
+  }
 }

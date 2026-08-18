@@ -6,7 +6,7 @@ A completely stateless [Model Context Protocol](https://modelcontextprotocol.io/
 
 ## Connect in three steps
 
-1. Open the deployed Worker URL in a browser.
+1. Open `https://caldavmcp.anpc.work` in a browser.
 2. Enter your CalDAV server, username, and app password. Leave **Calendar URL** blank to discover calendars automatically.
 3. Click **Make secure token**, then copy the generated MCP URL or configuration into your AI assistant.
 
@@ -21,7 +21,7 @@ Do not place raw passwords, app passwords, or access tokens directly in a URL. U
 Connection tokens are encrypted AES-GCM values:
 
 ```text
-POST https://your-worker.example.com/mcp/<encrypted-connection-token>
+POST https://caldavmcp.anpc.work/mcp/<encrypted-connection-token>
 ```
 
 The token represents connection details such as:
@@ -45,7 +45,7 @@ Prefer provider-specific app passwords or OAuth access tokens over a primary acc
 After deploying the Worker, configure your MCP client with the Worker URL. The exact configuration varies by client, but the endpoint is:
 
 ```text
-https://your-worker.example.com/mcp/<encrypted-connection-token>
+https://caldavmcp.anpc.work/mcp/<encrypted-connection-token>
 ```
 
 For an MCP client configuration that accepts a remote HTTP server, use the endpoint as the server URL. For example:
@@ -55,7 +55,7 @@ For an MCP client configuration that accepts a remote HTTP server, use the endpo
   "mcpServers": {
     "caldav": {
       "type": "http",
-      "url": "https://your-worker.example.com/mcp/<encrypted-connection-token>"
+      "url": "https://caldavmcp.anpc.work/mcp/<encrypted-connection-token>"
     }
   }
 }
@@ -125,6 +125,19 @@ Deploy to Cloudflare Workers:
 npx wrangler login
 npm run deploy
 ```
+
+The Worker is configured as a Cloudflare Custom Domain at
+`caldavmcp.anpc.work`. Wrangler creates the domain and certificate when the
+zone is active in the same Cloudflare account. Set the required secret before
+deploying:
+
+```sh
+npx wrangler secret put CONNECTION_TOKEN_KEY
+npm run deploy
+```
+
+The domain must be active in Cloudflare DNS. Do not add a conflicting CNAME
+record for `caldavmcp.anpc.work`; Custom Domains manage the DNS record.
 
 Set the encryption key as a Cloudflare Worker secret:
 
