@@ -69,6 +69,17 @@ For an MCP client configuration that accepts a remote HTTP server, use the endpo
 
 Do not paste the example token above into a real client. Replace it with a token generated for the intended CalDAV account and calendar.
 
+### Generate a token in the browser
+
+Open the deployed Worker’s main page at `https://your-worker.example.com/`. It includes a token tool with two options:
+
+1. Enter the CalDAV server URL, optional calendar URL, username, app password, and expiration.
+2. Choose **Make development token** for local testing, or **Make encrypted token** for production.
+3. Copy the generated token into the MCP URL.
+4. Use **Decode token** to inspect a token. Decoding happens in the browser and requires the encryption key for encrypted tokens.
+
+The development option is base64 encoding only and must not be used for production. The encrypted option requires the Worker’s `CONNECTION_TOKEN_KEY` and keeps credentials encrypted in the URL.
+
 The assistant will be able to call tools such as:
 
 - `list_calendars`
