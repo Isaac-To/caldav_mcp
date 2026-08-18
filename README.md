@@ -119,6 +119,15 @@ npm run typecheck
 # Run unit tests
 npm test
 
+# Run tests with coverage
+npm run coverage
+
+Coverage thresholds are enforced at 90% for statements, lines, and functions,
+and 85% for branches. The current unit-testable source modules report 100% in
+all four categories. The Cloudflare Worker entrypoint is excluded because it
+requires the Workers runtime and external CalDAV services; validate it with a
+deployed or `wrangler dev` smoke test.
+
 Deploy to Cloudflare Workers:
 
 ```sh

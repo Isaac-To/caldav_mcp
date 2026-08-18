@@ -53,6 +53,11 @@ describe('connection tokens', () => {
     await expect(createEncryptedToken(connection, 'AAAA')).rejects.toThrow('valid AES key');
   });
 
+  it('rejects invalid AES key lengths when importing a decryption key', async () => {
+    const token = await createEncryptedToken(connection, 'AAAAAAAAAAAAAAAAAAAAAA');
+    await expect(decodeConnectionToken(token, 'AAAA')).rejects.toThrow('valid AES key');
+  });
+
   it('matches only the configured secure origin', () => {
     expect(sameSecureOrigin('https://caldav.example.test/events/1.ics', connection.serverUrl)).toBe(true);
     expect(sameSecureOrigin('https://other.example.test/events/1.ics', connection.serverUrl)).toBe(false);
