@@ -11,7 +11,8 @@ const validateSlide = () => { for (const field of slides[slide].querySelectorAll
 const move = direction => { if (direction > 0 && !validateSlide()) return; slide = Math.max(0, Math.min(slides.length - 1, slide + direction)); renderSlide(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 const connection = () => {
   if (!$('serverUrl').value || !$('username').value || !$('password').value) throw new Error('Enter the server URL, username, and app password.');
-  const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value, expiresAt: Math.floor(Date.now() / 1000) + Number($('expiry').value) };
+  const value = { serverUrl: $('serverUrl').value, username: $('username').value, password: $('password').value };
+  if ($('expiry').value) value.expiresAt = Math.floor(Date.now() / 1000) + Number($('expiry').value);
   if ($('calendarUrl').value) value.calendarUrl = $('calendarUrl').value;
   return value;
 };
@@ -71,7 +72,7 @@ export function homePage(origin: string): Response {
         <label htmlFor="calendarUrl">Calendar URL <span className="fine">(optional — discovery works without it)</span></label><input id="calendarUrl" type="url" placeholder="https://caldav.example.com/calendars/..." />
         <label htmlFor="username">Username</label><input id="username" autoComplete="username" required />
         <label htmlFor="password">App password</label><input id="password" type="password" autoComplete="current-password" required />
-        <label htmlFor="expiry">Token lifetime</label><select id="expiry"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="2592000">30 days</option></select><p className="hint">Short-lived tokens reduce the impact of an accidentally shared MCP URL.</p>
+        <label htmlFor="expiry">Token lifetime</label><select id="expiry"><option value="" selected>No expiration</option><option value="3600">1 hour</option><option value="86400">1 day</option><option value="2592000">30 days</option></select><p className="hint">No expiration is convenient for a set-and-forget connection. Anyone with the MCP URL can access the configured calendar.</p>
       </section>
       <section data-slide="2" id="connect" className="panel soft" hidden><h2>03 / Connect your AI assistant</h2><p className="hint">Create your secure token, then copy one option into your MCP-compatible assistant.</p>
         <button id="makeToken" className="primary">Create secure token →</button><output id="made" className="status" aria-live="polite" />
@@ -79,7 +80,7 @@ export function homePage(origin: string): Response {
         <label htmlFor="config">Configuration</label><textarea id="config" readOnly placeholder="Your configuration appears here after token creation" /><button id="copyConfig" className="secondary">Copy configuration</button><output id="connectStatus" className="status" aria-live="polite" />
       </section>
       <nav className="navigation" aria-label="Setup navigation"><button id="back" className="secondary" type="button">← Back</button><span id="progress" className="status" aria-live="polite" /><button id="next" className="primary" type="button">Next →</button></nav>
-      <p className="fine">Tokens are encrypted and expire by default. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke all existing tokens. The service stores no calendar data.</p>
+      <p className="fine">Tokens are encrypted and do not expire unless you choose a lifetime above. Rotate <code>CONNECTION_TOKEN_KEY</code> to revoke all existing tokens. The service stores no calendar data.</p>
     </main>
     <script dangerouslySetInnerHTML={{ __html: clientScript(origin) }} />
   </>;

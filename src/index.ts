@@ -136,8 +136,7 @@ export default { async fetch(request: Request, env: Env): Promise<Response> {
     if (request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') return Response.json({ error: 'JSON required.' }, { status: 415, headers: securityHeaders() });
     try {
       const input = connectionSchema.parse(await request.json());
-      const connection = input.expiresAt ? input : { ...input, expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 };
-      const token = await createEncryptedToken(connection, env.CONNECTION_TOKEN_KEY);
+      const token = await createEncryptedToken(input, env.CONNECTION_TOKEN_KEY);
       return Response.json({ token }, { headers: securityHeaders() });
     } catch { return Response.json({ error: 'Invalid connection details.' }, { status: 400, headers: securityHeaders() }); }
   }

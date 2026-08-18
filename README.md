@@ -10,7 +10,7 @@ A completely stateless [Model Context Protocol](https://modelcontextprotocol.io/
 2. Enter your CalDAV server, username, and app password. Leave **Calendar URL** blank to discover calendars automatically.
 3. Click **Make secure token**, then copy the generated MCP URL or configuration into your AI assistant.
 
-The public page creates encrypted tokens that expire after one day by default. Credentials are sent over HTTPS to the Worker for encryption and are never decoded in the browser. Rotate `CONNECTION_TOKEN_KEY` if tokens need to be revoked.
+The public page creates encrypted tokens with no expiration by default for a set-and-forget connection. You can optionally choose a shorter lifetime. Credentials are sent over HTTPS to the Worker for encryption and are never decoded in the browser. Rotate `CONNECTION_TOKEN_KEY` if tokens need to be revoked.
 
 The assistant can list, search, read, create, update, and delete events, and query free/busy information. Every request is independent; no calendars, credentials, or sessions are stored.
 
@@ -36,8 +36,7 @@ The token represents connection details such as:
 }
 ```
 
-The Worker decrypts each token for one request and discards the connection details afterward. Tokens do not expire; rotate `CONNECTION_TOKEN_KEY` to revoke all tokens created with the previous key. Configure it as a Worker secret. The key must be URL-safe base64 containing a 128-, 192-, or 256-bit AES key.
-The Worker decrypts each token for one request and discards the connection details afterward. Tokens expire by default; rotate `CONNECTION_TOKEN_KEY` to revoke all tokens created with the previous key. Event and free/busy URLs must belong to the configured CalDAV server. Configure it as a Worker secret. The key must be URL-safe base64 containing a 128-, 192-, or 256-bit AES key.
+The Worker decrypts each token for one request and discards the connection details afterward. Tokens do not expire unless an expiration is selected when creating them; rotate `CONNECTION_TOKEN_KEY` to revoke all tokens created with the previous key. Event and free/busy URLs must belong to the configured CalDAV server. Configure it as a Worker secret. The key must be URL-safe base64 containing a 128-, 192-, or 256-bit AES key.
 
 Prefer provider-specific app passwords or OAuth access tokens over a primary account password. Never commit tokens or credentials to this repository.
 
