@@ -8,7 +8,7 @@ Source code and deployment guidance are available in the [GitHub repository](htt
 
 ## Connect in three steps
 
-1. Open `https://caldavmcp.anpc.work` in a browser.
+1. Open `https://projects-caldavmcp.sfisaact.com` in a browser.
 2. Enter your CalDAV server, username, and app password, then click **Test connection**. Leave **Calendar URL** blank to discover calendars automatically.
 3. Choose a default calendar if desired, create the secure token, then copy the generated MCP URL or configuration into your AI assistant.
 
@@ -23,7 +23,7 @@ Do not place raw passwords, app passwords, or access tokens directly in a URL. U
 Connection tokens are encrypted AES-GCM values:
 
 ```text
-POST https://caldavmcp.anpc.work/mcp/<encrypted-connection-token>
+POST https://projects-caldavmcp.sfisaact.com/mcp/<encrypted-connection-token>
 ```
 
 The token represents connection details such as:
@@ -47,7 +47,7 @@ Prefer provider-specific app passwords or OAuth access tokens over a primary acc
 After deploying the Worker, configure your MCP client with the Worker URL. The exact configuration varies by client, but the endpoint is:
 
 ```text
-https://caldavmcp.anpc.work/mcp/<encrypted-connection-token>
+https://projects-caldavmcp.sfisaact.com/mcp/<encrypted-connection-token>
 ```
 
 For an MCP client configuration that accepts a remote HTTP server, use the endpoint as the server URL. For example:
@@ -57,7 +57,7 @@ For an MCP client configuration that accepts a remote HTTP server, use the endpo
   "mcpServers": {
     "caldav": {
       "type": "http",
-      "url": "https://caldavmcp.anpc.work/mcp/<encrypted-connection-token>"
+      "url": "https://projects-caldavmcp.sfisaact.com/mcp/<encrypted-connection-token>"
     }
   }
 }
